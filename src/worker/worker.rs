@@ -2,11 +2,12 @@ use std::net::TcpStream;
 
 use log::info;
 
-pub fn run_worker(address: &str, port: u16) -> Result<(), &'static str> {
-    info!("Connecting to server...");
+use crate::worker::result::{WorkerError, WorkerResult};
 
-    let _stream = TcpStream::connect(format!("{}:{}", address, port))
-        .map_err(|_| "Unable to connect to server.")?;
+pub fn run_worker(address: &str, port: u16) -> WorkerResult {
+    info!("connecting to {}:{}...", address, port);
+
+    let mut stream = TcpStream::connect((address, port)).map_err(WorkerError::ConnectError)?;
 
     loop {} // TODO
 }

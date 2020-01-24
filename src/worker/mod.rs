@@ -1,2 +1,2 @@
-pub mod render;
+pub mod result;
 pub mod worker;
