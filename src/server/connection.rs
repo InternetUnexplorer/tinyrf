@@ -7,6 +7,7 @@ use std::io::{BufReader, BufWriter};
 use std::net::TcpStream;
 
 pub struct Connection<'a> {
+    name: Option<String>,
     reader: BufReader<&'a TcpStream>,
     writer: BufWriter<&'a TcpStream>,
 }
@@ -17,19 +18,36 @@ pub type ConnectionResult<T> = Result<T, ConnectionError>;
 pub enum ConnectionError {
     #[fail(display = "I/O error: {}", 0)]
     IoError(#[fail(cause)] io::Error),
+    #[fail(display = "unexpected message: {:?}", 0)]
+    MessageError(WorkerMessage),
 }
 
 impl<'a> Connection<'a> {
     /// Handle an incoming worker connection
     pub fn handle(stream: TcpStream) {
-        info!("worker connected: {}", stream.peer_addr().unwrap());
-
         let mut connection = Connection {
+            name: None,
             reader: BufReader::new(&stream),
             writer: BufWriter::new(&stream),
         };
 
-        // TODO
+        // Read the init message from the worker
+        if let Ok(WorkerMessage::Init { name }) = connection.read_message() {
+            // Print connection message
+            let address = stream.peer_addr().unwrap();
+
+            let worker_info = match &name {
+                Some(name) => format!("{} ({})", address, name),
+                None => format!("{}", address),
+            };
+
+            info!("worker connected: {}", worker_info);
+
+            // Set the worker name
+            connection.name = name;
+
+            loop {} // TODO
+        }
     }
 
     /// Read a message from the worker (blocking)
