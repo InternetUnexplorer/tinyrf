@@ -1,25 +1,41 @@
-pub mod result;
+pub mod connection;
 
-use std::net::{TcpListener, TcpStream};
-use std::thread;
-
+use crate::server::connection::Connection;
+use failure::Fail;
 use log::info;
+use std::{io, net::TcpListener, thread};
 
-use crate::server::result::{ServerError, ServerResult};
+pub type ServerResult = Result<(), ServerError>;
 
-pub fn handle_worker(stream: TcpStream) {
-    info!("worker connected: {}", stream.peer_addr().unwrap());
-    // TODO
+#[derive(Fail, Debug)]
+pub enum ServerError {
+    #[fail(display = "error starting server: {}", 0)]
+    InitError(#[fail(cause)] io::Error),
 }
 
-pub fn run_server(address: &str, port: u16) -> ServerResult {
-    info!("starting server on {}:{}...", address, port);
+pub struct Server {
+    listener: TcpListener,
+}
 
-    let listener = TcpListener::bind((address, port)).map_err(ServerError::InitError)?;
+impl Server {
+    /// Start the server
+    pub fn run(address: &str, port: u16) -> ServerResult {
+        info!("starting server on {}:{}...", address, port);
 
-    for stream in listener.incoming().filter_map(|stream| stream.ok()) {
-        thread::spawn(move || handle_worker(stream));
+        let server = Server {
+            listener: TcpListener::bind((address, port)).map_err(ServerError::InitError)?,
+        };
+
+        info!("server started.");
+
+        server.handle_connections();
     }
 
-    Ok(())
+    /// Wait for and handle incoming connections
+    fn handle_connections(&self) -> ! {
+        for stream in self.listener.incoming().filter_map(|stream| stream.ok()) {
+            thread::spawn(move || Connection::handle(stream));
+        }
+        unreachable!();
+    }
 }
