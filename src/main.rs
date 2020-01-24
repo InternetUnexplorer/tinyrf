@@ -5,14 +5,16 @@ mod server;
 mod worker;
 
 use crate::{server::Server, worker::Worker};
-use log::error;
+use log::{error, LevelFilter};
 use std::{env::args, process::exit};
 
 const ADDRESS: &str = "localhost";
 const PORT: u16 = 4096;
 
 fn main() {
-    pretty_env_logger::init();
+    pretty_env_logger::formatted_builder()
+        .filter_level(LevelFilter::Debug)
+        .init();
 
     match args().nth(1).as_ref().map(|arg| arg.as_str()) {
         Some("server") => {
