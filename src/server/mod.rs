@@ -1,9 +1,13 @@
 pub mod connection;
+pub mod project;
 
 use crate::server::connection::Connection;
+use crate::server::project::Project;
 use failure::Fail;
 use log::info;
+use std::collections::HashMap;
 use std::{io, net::TcpListener, thread};
+use uuid::Uuid;
 
 pub type ServerResult = Result<(), ServerError>;
 
@@ -15,6 +19,7 @@ pub enum ServerError {
 
 pub struct Server {
     listener: TcpListener,
+    projects: HashMap<Uuid, Project>,
 }
 
 impl Server {
@@ -24,6 +29,7 @@ impl Server {
 
         let server = Server {
             listener: TcpListener::bind((address, port)).map_err(ServerError::InitError)?,
+            projects: HashMap::new(),
         };
 
         info!("server started.");
