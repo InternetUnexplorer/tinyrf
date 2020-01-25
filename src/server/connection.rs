@@ -1,52 +1,70 @@
 use crate::common::message::{ServerMessage, WorkerMessage};
-use crate::common::util::{read_json, write_json};
+use crate::common::net::{read_json, write_json};
+use crate::server::scheduler::{SchedulerRenderMessage, SchedulerResultMessage};
+use crossbeam_channel::{Receiver, Sender};
 use failure::Fail;
-use log::info;
-use std::io;
+use log::{error, info};
 use std::io::{BufReader, BufWriter};
-use std::net::TcpStream;
+use std::net::{IpAddr, TcpStream};
+use std::{fmt, io};
 
-pub struct Connection<'a> {
+pub(super) struct Connection<'a> {
     name: Option<String>,
+    addr: IpAddr,
     reader: BufReader<&'a TcpStream>,
     writer: BufWriter<&'a TcpStream>,
+    render_recv: Receiver<SchedulerRenderMessage>,
+    result_send: Sender<SchedulerResultMessage>,
 }
 
-pub type ConnectionResult<T> = Result<T, ConnectionError>;
+type ConnectionResult<T> = Result<T, ConnectionError>;
 
 #[derive(Fail, Debug)]
-pub enum ConnectionError {
+enum ConnectionError {
     #[fail(display = "I/O error: {}", 0)]
     IoError(#[fail(cause)] io::Error),
     #[fail(display = "unexpected message: {:?}", 0)]
     MessageError(WorkerMessage),
 }
 
-impl<'a> Connection<'a> {
+impl Connection<'_> {
     /// Handle an incoming worker connection
-    pub fn handle(stream: TcpStream) {
+    pub(super) fn handle(
+        stream: TcpStream,
+        render_recv: Receiver<SchedulerRenderMessage>,
+        result_send: Sender<SchedulerResultMessage>,
+    ) {
         let mut connection = Connection {
             name: None,
+            addr: stream.peer_addr().unwrap().ip(),
             reader: BufReader::new(&stream),
             writer: BufWriter::new(&stream),
+            render_recv,
+            result_send,
         };
 
         // Read the init message from the worker
         if let Ok(WorkerMessage::Init { name }) = connection.read_message() {
-            // Print connection message
-            let address = stream.peer_addr().unwrap();
-
-            let worker_info = match &name {
-                Some(name) => format!("{} ({})", address, name),
-                None => format!("{}", address),
-            };
-
-            info!("worker connected: {}", worker_info);
-
             // Set the worker name
             connection.name = name;
 
-            loop {} // TODO
+            info!("worker connected: {}", connection);
+
+            // Wait for and send render tasks until an error occurs
+            if let Err(error) = connection.communicate() {
+                error!("worker disconnected: {}: {}", connection, error);
+            }
+        }
+    }
+
+    /// Wait for render tasks and send them to the worker
+    fn communicate(&mut self) -> ConnectionResult<()> {
+        loop {
+            // Wait for a render message from the scheduler
+            let render_message = self.render_recv.recv().unwrap();
+            // Send the render information to the worker
+            self.write_message(ServerMessage::StartRender(render_message.0))?;
+            // TODO
         }
     }
 
@@ -64,5 +82,14 @@ impl<'a> Connection<'a> {
 impl From<io::Error> for ConnectionError {
     fn from(error: io::Error) -> Self {
         Self::IoError(error)
+    }
+}
+
+impl fmt::Display for Connection<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.name {
+            Some(name) => write!(f, "{} ({}) ", name, self.addr),
+            None => write!(f, "{}", self.addr),
+        }
     }
 }

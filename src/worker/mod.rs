@@ -1,34 +1,44 @@
 mod render;
 
 use crate::common::message::{ServerMessage, WorkerMessage};
-use crate::common::util::{read_json, write_json};
+use crate::common::net::{read_json, write_json};
 use failure::Fail;
 use log::info;
+use std::env::temp_dir;
+use std::fs::create_dir;
 use std::io;
 use std::io::{BufReader, BufWriter};
 use std::net::TcpStream;
+use std::path::PathBuf;
+use std::process::id;
 
-pub type WorkerResult<T> = Result<T, WorkerError>;
+pub(super) type WorkerResult<T> = Result<T, WorkerError>;
 
 #[derive(Fail, Debug)]
-pub enum WorkerError {
+pub(super) enum WorkerError {
+    #[fail(display = "error initializing working directory: {}", 0)]
+    WorkingDirError(#[fail(cause)] io::Error),
     #[fail(display = "error connecting to server: {}", 0)]
     ConnectError(#[fail(cause)] io::Error),
     #[fail(display = "I/O error: {}", 0)]
     IoError(#[fail(cause)] io::Error),
 }
 
-pub struct Worker<'a> {
+pub(super) struct Worker<'a> {
     name: Option<String>,
+    working_dir: PathBuf,
     reader: BufReader<&'a TcpStream>,
     writer: BufWriter<&'a TcpStream>,
 }
 
 impl<'a> Worker<'a> {
     /// Connect to the server and handle messages
-    pub fn connect(name: Option<String>, address: &str, port: u16) -> WorkerResult<()> {
+    pub(super) fn connect(name: Option<String>, address: &str, port: u16) -> WorkerResult<()> {
         // If no name has been specified, try to use the hostname
         let name = name.or_else(Self::get_hostname);
+
+        // Initialize the working directory
+        let working_dir = Self::init_working_dir()?;
 
         info!("connecting to {}:{}...", address, port);
 
@@ -39,6 +49,7 @@ impl<'a> Worker<'a> {
 
         let mut worker = Worker {
             name,
+            working_dir,
             reader: BufReader::new(&stream),
             writer: BufWriter::new(&stream),
         };
@@ -67,8 +78,11 @@ impl<'a> Worker<'a> {
 
     /// Handle a message from the server
     fn handle_message(&mut self, message: ServerMessage) -> WorkerResult<()> {
-        info!("-> {:?}", message);
-        // TODO
+        match message {
+            ServerMessage::StartRender(task) => {
+                info!("received a render task: {:?}", task);
+            }
+        }
         Ok(())
     }
 
@@ -77,6 +91,16 @@ impl<'a> Worker<'a> {
         hostname::get()
             .map(|s| String::from(s.to_string_lossy()))
             .ok()
+    }
+
+    /// Initialize the working directory
+    fn init_working_dir() -> WorkerResult<PathBuf> {
+        let working_dir = temp_dir().join(format!("worker_{}", id()));
+        // Create directory if it does not exist
+        if !working_dir.is_dir() {
+            create_dir(&working_dir)?
+        }
+        Ok(working_dir)
     }
 }
 

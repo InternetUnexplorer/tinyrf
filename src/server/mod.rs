@@ -1,46 +1,43 @@
-pub mod connection;
-pub mod project;
+pub(crate) mod connection;
+pub(crate) mod project;
+pub(crate) mod scheduler;
 
 use crate::server::connection::Connection;
-use crate::server::project::Project;
+use crate::server::scheduler::Scheduler;
 use failure::Fail;
 use log::info;
-use std::collections::HashMap;
 use std::{io, net::TcpListener, thread};
-use uuid::Uuid;
 
-pub type ServerResult = Result<(), ServerError>;
+pub(super) type ServerResult = Result<(), ServerError>;
 
 #[derive(Fail, Debug)]
-pub enum ServerError {
+pub(super) enum ServerError {
     #[fail(display = "error starting server: {}", 0)]
     InitError(#[fail(cause)] io::Error),
 }
 
-pub struct Server {
-    listener: TcpListener,
-    projects: HashMap<Uuid, Project>,
-}
+pub(super) struct Server {}
 
 impl Server {
     /// Start the server
-    pub fn run(address: &str, port: u16) -> ServerResult {
+    pub(super) fn run(address: &str, port: u16) -> ServerResult {
         info!("starting server on {}:{}...", address, port);
 
-        let server = Server {
-            listener: TcpListener::bind((address, port)).map_err(ServerError::InitError)?,
-            projects: HashMap::new(),
-        };
+        // Start the scheduler in a new thread
+        let (render_recv, result_send, manage_send) = Scheduler::start();
+
+        // Bind to the socket
+        let listener = TcpListener::bind((address, port)).map_err(ServerError::InitError)?;
 
         info!("server started.");
 
-        server.handle_connections();
-    }
-
-    /// Wait for and handle incoming connections
-    fn handle_connections(&self) -> ! {
-        for stream in self.listener.incoming().filter_map(|stream| stream.ok()) {
-            thread::spawn(move || Connection::handle(stream));
+        // Handle incoming connections
+        for stream in listener.incoming().filter_map(|stream| stream.ok()) {
+            // Clone render and result channel endpoints
+            let render_recv = render_recv.clone();
+            let result_send = result_send.clone();
+            // Spawn a thread to handle the connection
+            thread::spawn(move || Connection::handle(stream, render_recv, result_send));
         }
         unreachable!();
     }

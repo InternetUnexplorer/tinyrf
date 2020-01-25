@@ -1,24 +1,20 @@
+use crate::common::render_task::RenderTask;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 /// A message sent from the server to the worker
 #[derive(Debug, Deserialize, Serialize)]
-pub enum ServerMessage {
+pub(crate) enum ServerMessage {
     /// Start a new render
-    StartRender { animation: Uuid, frame: u32 },
-    /// Cancel the current render
-    CancelRender,
+    StartRender(RenderTask),
 }
 
 /// A message sent from the worker to the server
 #[derive(Debug, Deserialize, Serialize)]
-pub enum WorkerMessage {
-    /// Connected and ready to receive
+pub(crate) enum WorkerMessage {
+    /// Connected and ready to render
     Init { name: Option<String> },
-    /// An error occurred while downloading
-    DownloadFailed,
-    /// An error occurred while uploading
-    UploadFailed,
-    /// Rendering finished
+    /// Rendering finished, ready to upload
     RenderFinished,
+    /// Rendering failed
+    RenderFailed,
 }
