@@ -9,7 +9,8 @@ use crate::server::project::Project;
 use crate::server::scheduler::{Scheduler, SchedulerManageMessage};
 use failure::Fail;
 use log::{debug, info};
-use std::{io, net::TcpListener, thread};
+use std::net::TcpListener;
+use std::{io, thread};
 
 pub(super) type ServerResult<T> = Result<T, ServerError>;
 
@@ -40,6 +41,14 @@ impl Server {
         let (render_recv, result_send, manage_send) = Scheduler::start();
 
         info!("Server started!");
+
+        // Add a test project
+        let project = Project::new("Test Project".into(), FileExt::PNG, 1, 10);
+        let project_file = get_project_file(&working_dir, &project.uuid);
+        std::fs::create_dir(project_file.parent().unwrap()).unwrap();
+        std::fs::copy("/tmp/untitled.blend", project_file).unwrap();
+        let message = SchedulerManageMessage::AddProject(project);
+        manage_send.send(message).unwrap();
 
         // Handle incoming connections
         for stream in listener.incoming().filter_map(|stream| stream.ok()) {
