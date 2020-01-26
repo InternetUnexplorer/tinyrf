@@ -86,14 +86,14 @@ impl Scheduler {
             } else {
                 // Block until there are messages
                 let _ = selector.ready();
-                // Handle messages
-                while let Ok(message) = self.result_recv.try_recv() {
-                    self.handle_result_msg(message);
-                }
-                // Handle management messages
-                while let Ok(message) = self.manage_recv.try_recv() {
-                    self.handle_manage_msg(message);
-                }
+            }
+            // Handle messages
+            while let Ok(message) = self.result_recv.try_recv() {
+                self.handle_result_msg(message);
+            }
+            // Handle management messages
+            while let Ok(message) = self.manage_recv.try_recv() {
+                self.handle_manage_msg(message);
             }
         }
     }

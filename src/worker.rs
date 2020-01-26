@@ -2,7 +2,8 @@ mod render;
 
 use crate::common::file::{get_project_file, init_working_dir};
 use crate::common::message::{ServerMessage, WorkerMessage};
-use crate::common::net::{read_file, read_json, write_file, write_json};
+use crate::common::net::{read_json, write_json};
+use crate::common::transfer::{recv_file, send_file};
 use failure::Fail;
 use log::{debug, error, info};
 use std::io::{BufReader, BufWriter};
@@ -21,10 +22,8 @@ pub(super) enum WorkerError {
     ConnectError(#[fail(cause)] io::Error),
     #[fail(display = "I/O error: {}", 0)]
     IoError(#[fail(cause)] io::Error),
-    #[fail(display = "Error sending file: {}", 0)]
-    SendFileError(#[fail(cause)] io::Error),
-    #[fail(display = "Error receiving file: {}", 0)]
-    RecvFileError(#[fail(cause)] io::Error),
+    #[fail(display = "Error transferring file: {}", 0)]
+    TransferError(#[fail(cause)] io::Error),
 }
 
 pub(super) struct Worker<'a> {
@@ -74,56 +73,50 @@ impl<'a> Worker<'a> {
         match message {
             ServerMessage::StartRender(task) => {
                 // Download the project file
-                info!("(1/4) Downloading project \"{}\"...", task.project_name);
-                self.download_project(&task.project_uuid)
-                    .map_err(WorkerError::RecvFileError)?;
+                info!("Downloading project \"{}\"...", task.project_name);
+                self.download_project(&task.project_uuid)?;
                 // Render the frame
-                info!("(2/4) Rendering frame {}...", task.frame);
+                info!("Rendering frame {}...", task.frame);
                 match render::render(&task, &self.working_dir) {
                     Ok(output_file) => {
                         info!(
-                            "(3/4) Uploading file \"{}\"...",
+                            "Uploading file \"{}\"...",
                             output_file.file_name().unwrap().to_string_lossy()
                         );
                         // Send the result to the server
                         self.write_message(WorkerMessage::RenderResult(Ok(())))?;
                         // Upload the output file
-                        self.upload_output(&output_file)
-                            .map_err(WorkerError::SendFileError)?;
-                        info!("(4/4) Upload complete");
+                        self.upload_output(&output_file)?;
+                        Ok(info!("Upload complete"))
                     }
                     Err(error) => {
                         error!("Render failed: {}", error);
                         // Send the result to the server
-                        self.write_message(WorkerMessage::RenderResult(Err(())))?;
+                        Ok(self.write_message(WorkerMessage::RenderResult(Err(())))?)
                     }
                 }
             }
         }
-        Ok(())
     }
 
     /// Download the project file for a render task
-    fn download_project(&mut self, project_uuid: &Uuid) -> io::Result<()> {
+    fn download_project(&mut self, project_uuid: &Uuid) -> WorkerResult<()> {
         let project_file = get_project_file(&self.working_dir, project_uuid);
         // Create the parent directory if it does not exist
         let project_dir = project_file.parent().unwrap();
         if !project_dir.is_dir() {
             fs::create_dir(project_dir)?;
         }
-        // TODO: allow for existing file to be reused (tell server to skip download)
-        // Remove the file if it already exists
-        if project_file.is_file() {
-            fs::remove_file(&project_file)?;
-        }
         // Download the file
-        read_file(&mut self.reader, &project_file)
+        recv_file(&mut self.reader, &mut self.writer, &project_file)
+            .map_err(WorkerError::TransferError)
     }
 
     /// Upload the output of a render
-    fn upload_output(&mut self, output_file: &Path) -> io::Result<()> {
+    fn upload_output(&mut self, output_file: &Path) -> WorkerResult<()> {
         // Upload the file
-        write_file(&mut self.writer, output_file)?;
+        send_file(&mut self.reader, &mut self.writer, output_file)
+            .map_err(WorkerError::TransferError)?;
         // Remove the file after uploading
         Ok(fs::remove_file(output_file)?)
     }

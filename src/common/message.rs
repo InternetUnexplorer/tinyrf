@@ -16,3 +16,12 @@ pub(crate) enum WorkerMessage {
     /// Render task finished with result
     RenderResult(RenderTaskResult),
 }
+
+/// A message sent during file transfer
+#[derive(Debug, Deserialize, Serialize)]
+pub(crate) enum TransferMessage {
+    /// Ready to send the specified number of bytes
+    SendReady { length: u64 },
+    /// Ready to receive starting at the specified offset
+    RecvReady { offset: u64 },
+}

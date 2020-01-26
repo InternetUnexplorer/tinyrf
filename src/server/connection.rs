@@ -1,7 +1,8 @@
 use crate::common::file::{get_output_file, get_project_file};
 use crate::common::message::{ServerMessage, WorkerMessage};
-use crate::common::net::{read_file, read_json, write_file, write_json};
+use crate::common::net::{read_json, write_json};
 use crate::common::render_task::{RenderTask, RenderTaskResult};
+use crate::common::transfer::{recv_file, send_file};
 use crate::server::scheduler::{SchedulerRenderMessage, SchedulerResultMessage};
 use crossbeam_channel::{Receiver, Sender};
 use failure::Fail;
@@ -27,10 +28,8 @@ type ConnectionResult<T> = Result<T, ConnectionError>;
 enum ConnectionError {
     #[fail(display = "I/O error: {}", 0)]
     IoError(#[fail(cause)] io::Error),
-    #[fail(display = "Error sending file: {}", 0)]
-    SendFileError(#[fail(cause)] io::Error),
-    #[fail(display = "Error receiving file: {}", 0)]
-    RecvFileError(#[fail(cause)] io::Error),
+    #[fail(display = "Error transferring file: {}", 0)]
+    TransferError(#[fail(cause)] io::Error),
     #[fail(display = "Unexpected message: {:?}", 0)]
     MessageError(WorkerMessage),
 }
@@ -92,15 +91,16 @@ impl Connection<'_> {
         // Send the render information to the worker
         self.write_message(ServerMessage::StartRender(render_task.clone()))?;
         // Send the project file to the worker
-        write_file(&mut self.writer, &project_file).map_err(ConnectionError::SendFileError)?;
+        send_file(&mut self.reader, &mut self.writer, &project_file)
+            .map_err(ConnectionError::TransferError)?;
         // Wait for a result message from the worker
         match self.read_message()? {
             WorkerMessage::RenderResult(result) => {
                 // If the result was success, download the output from the worker
                 if result.is_ok() {
                     let output_file = get_output_file(self.project_dir, &render_task);
-                    read_file(&mut self.reader, &output_file)
-                        .map_err(ConnectionError::RecvFileError)?;
+                    recv_file(&mut self.reader, &mut self.writer, &output_file)
+                        .map_err(ConnectionError::TransferError)?;
                 }
                 Ok(result)
             }
