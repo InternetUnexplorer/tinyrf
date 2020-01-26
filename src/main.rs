@@ -16,6 +16,10 @@ struct Config {
     #[structopt(short = "s", long = "server")]
     server: bool,
 
+    /// Enables debugging messages
+    #[structopt(short = "v", long = "verbose")]
+    verbose: bool,
+
     /// Server address
     #[structopt(name = "ADDRESS", default_value = "localhost")]
     address: String,
@@ -33,10 +37,8 @@ fn main() {
     // Parse command-line arguments
     let config = Config::from_args();
 
-    // Initialize logging with LevelFilter::Info
-    pretty_env_logger::formatted_builder()
-        .filter_level(LevelFilter::Info)
-        .init();
+    // Set up logging
+    init_logger(config.verbose);
 
     // Run the server or the worker
     if config.server {
@@ -44,6 +46,18 @@ fn main() {
     } else {
         run_worker(config);
     }
+}
+
+/// Configure and initialize the global logger
+fn init_logger(debug: bool) {
+    let level = match debug {
+        true => LevelFilter::Trace,
+        false => LevelFilter::Info,
+    };
+    env_logger::builder()
+        .filter_level(level)
+        .format_module_path(false)
+        .init();
 }
 
 /// Run the server, printing an error message on failure

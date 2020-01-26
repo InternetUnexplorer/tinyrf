@@ -4,28 +4,26 @@ use crate::common::file::{get_project_file, init_working_dir};
 use crate::common::message::{ServerMessage, WorkerMessage};
 use crate::common::net::{read_file, read_json, write_file, write_json};
 use failure::Fail;
-use log::{error, info};
-use std::fs;
-use std::fs::remove_file;
-use std::io;
+use log::{debug, error, info};
 use std::io::{BufReader, BufWriter};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 use uuid::Uuid;
 
 pub(super) type WorkerResult<T> = Result<T, WorkerError>;
 
 #[derive(Fail, Debug)]
 pub(super) enum WorkerError {
-    #[fail(display = "error initializing working directory: {}", 0)]
+    #[fail(display = "Error initializing working directory: {}", 0)]
     WorkingDirError(#[fail(cause)] io::Error),
-    #[fail(display = "error connecting to server: {}", 0)]
+    #[fail(display = "Error connecting to server: {}", 0)]
     ConnectError(#[fail(cause)] io::Error),
     #[fail(display = "I/O error: {}", 0)]
     IoError(#[fail(cause)] io::Error),
-    #[fail(display = "error sending file: {}", 0)]
+    #[fail(display = "Error sending file: {}", 0)]
     SendFileError(#[fail(cause)] io::Error),
-    #[fail(display = "error receiving file: {}", 0)]
+    #[fail(display = "Error receiving file: {}", 0)]
     RecvFileError(#[fail(cause)] io::Error),
 }
 
@@ -45,12 +43,12 @@ impl<'a> Worker<'a> {
         // Initialize the working directory
         let working_dir = init_working_dir("worker").map_err(WorkerError::WorkingDirError)?;
 
-        info!("connecting to {}:{}...", address, port);
+        info!("Connecting to {}:{}...", address, port);
 
         // Attempt to open a connection to the server
         let stream = TcpStream::connect((address, port)).map_err(WorkerError::ConnectError)?;
 
-        info!("connected to server.");
+        info!("Connected to server!");
 
         let mut worker = Worker {
             name,
@@ -76,15 +74,15 @@ impl<'a> Worker<'a> {
         match message {
             ServerMessage::StartRender(task) => {
                 // Download the project file
-                info!("(1/4) downloading project \"{}\"...", task.project_name);
+                info!("(1/4) Downloading project \"{}\"...", task.project_name);
                 self.download_project(&task.project_uuid)
                     .map_err(WorkerError::RecvFileError)?;
                 // Render the frame
-                info!("(2/4) rendering frame {}...", task.frame);
+                info!("(2/4) Rendering frame {}...", task.frame);
                 match render::render(&task, &self.working_dir) {
                     Ok(output_file) => {
                         info!(
-                            "(3/4) uploading \"{}\"...",
+                            "(3/4) Uploading file \"{}\"...",
                             output_file.file_name().unwrap().to_string_lossy()
                         );
                         // Send the result to the server
@@ -92,10 +90,10 @@ impl<'a> Worker<'a> {
                         // Upload the output file
                         self.upload_output(&output_file)
                             .map_err(WorkerError::SendFileError)?;
-                        info!("(4/4) upload complete.");
+                        info!("(4/4) Upload complete");
                     }
                     Err(error) => {
-                        error!("render failed: {}", error);
+                        error!("Render failed: {}", error);
                         // Send the result to the server
                         self.write_message(WorkerMessage::RenderResult(Err(())))?;
                     }
@@ -116,7 +114,7 @@ impl<'a> Worker<'a> {
         // TODO: allow for existing file to be reused (tell server to skip download)
         // Remove the file if it already exists
         if project_file.is_file() {
-            remove_file(&project_file)?;
+            fs::remove_file(&project_file)?;
         }
         // Download the file
         read_file(&mut self.reader, &project_file)
@@ -132,11 +130,14 @@ impl<'a> Worker<'a> {
 
     /// Read a message from the server (blocking)
     fn read_message(&mut self) -> io::Result<ServerMessage> {
-        read_json(&mut self.reader)
+        let message = read_json(&mut self.reader)?;
+        debug!("Server -> {:?}", &message);
+        Ok(message)
     }
 
     /// Send a message to the server
     fn write_message(&mut self, message: WorkerMessage) -> io::Result<()> {
+        debug!("Server <- {:?}", &message);
         write_json(&mut self.writer, message)
     }
 

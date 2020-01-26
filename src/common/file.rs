@@ -1,4 +1,5 @@
 use crate::common::render_task::RenderTask;
+use log::debug;
 use std::env::temp_dir;
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
@@ -13,6 +14,8 @@ pub(crate) fn init_working_dir(prefix: &str) -> io::Result<PathBuf> {
         .join(format!("{}_{}", prefix, process::id()));
     // Create the directory (raises an error if the directory already exists)
     create_dir_all(&working_dir)?;
+
+    debug!("Working directory set to {:?}", &working_dir);
     Ok(working_dir)
 }
 

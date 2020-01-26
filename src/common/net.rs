@@ -1,3 +1,4 @@
+use log::debug;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fs::OpenOptions;
@@ -40,8 +41,14 @@ pub(crate) fn read_file(reader: &mut impl Read, output_file: &Path) -> io::Resul
     reader.read_exact(&mut length)?;
     let length = u64::from_le_bytes(length);
     // Copy the data
-    assert!(io::copy(&mut reader.take(length), &mut writer)? == length);
-    Ok(())
+    debug!("Receiving {} bytes...", length);
+    let received = io::copy(&mut reader.take(length), &mut writer)?;
+    // Check the number of bytes received
+    if received == length {
+        Ok(())
+    } else {
+        Err(io::Error::from(io::ErrorKind::Interrupted))
+    }
 }
 
 /// Write a length-delimited file to the writer
@@ -53,6 +60,7 @@ pub(crate) fn write_file(writer: &mut impl Write, input_file: &Path) -> io::Resu
     // Send the length
     writer.write_all(&u64::to_le_bytes(length))?;
     // Copy the data
+    debug!("Sending {} bytes...", length);
     io::copy(&mut reader, writer)?;
     writer.flush()
 }

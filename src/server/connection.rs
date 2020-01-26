@@ -5,7 +5,7 @@ use crate::common::render_task::{RenderTask, RenderTaskResult};
 use crate::server::scheduler::{SchedulerRenderMessage, SchedulerResultMessage};
 use crossbeam_channel::{Receiver, Sender};
 use failure::Fail;
-use log::{error, info};
+use log::{debug, error, info};
 use std::io::{BufReader, BufWriter};
 use std::net::{IpAddr, TcpStream};
 use std::path::Path;
@@ -27,11 +27,11 @@ type ConnectionResult<T> = Result<T, ConnectionError>;
 enum ConnectionError {
     #[fail(display = "I/O error: {}", 0)]
     IoError(#[fail(cause)] io::Error),
-    #[fail(display = "error sending file: {}", 0)]
+    #[fail(display = "Error sending file: {}", 0)]
     SendFileError(#[fail(cause)] io::Error),
-    #[fail(display = "error receiving file: {}", 0)]
+    #[fail(display = "Error receiving file: {}", 0)]
     RecvFileError(#[fail(cause)] io::Error),
-    #[fail(display = "unexpected message: {:?}", 0)]
+    #[fail(display = "Unexpected message: {:?}", 0)]
     MessageError(WorkerMessage),
 }
 
@@ -53,17 +53,20 @@ impl Connection<'_> {
             project_dir,
         };
 
+        debug!("Incoming connection from {}", &connection.addr);
+
         // Read the init message from the worker
         if let Ok(WorkerMessage::Init { name }) = connection.read_message() {
             // Set the worker name
             connection.name = name;
 
-            info!("worker connected: {}", connection);
+            info!("Worker connected: {}", connection);
 
             // Wait for and handle render tasks until an error occurs
             let error = loop {
                 // Wait for a render task from the scheduler
                 let render_task = connection.render_recv.recv().unwrap().0;
+                debug!("Received task from scheduler: {:?}", &render_task);
                 // Send the task to the worker and get the result
                 let result = connection.handle_render_task(render_task.clone());
                 // Handle the result
@@ -75,7 +78,7 @@ impl Connection<'_> {
                     }
                 }
             };
-            error!("worker disconnected: {}: {}", connection, error);
+            error!("Worker disconnected: {}: {}", connection, error);
         }
     }
 
@@ -107,11 +110,14 @@ impl Connection<'_> {
 
     /// Read a message from the worker (blocking)
     fn read_message(&mut self) -> ConnectionResult<WorkerMessage> {
-        Ok(read_json(&mut self.reader)?)
+        let message = read_json(&mut self.reader)?;
+        debug!("{} -> {:?}", &self.addr, &message);
+        Ok(message)
     }
 
     /// Send a message to the worker
     fn write_message(&mut self, message: ServerMessage) -> ConnectionResult<()> {
+        debug!("{} <- {:?}", &self.addr, &message);
         Ok(write_json(&mut self.writer, message)?)
     }
 
@@ -132,7 +138,7 @@ impl From<io::Error> for ConnectionError {
 impl fmt::Display for Connection<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.name {
-            Some(name) => write!(f, "{} ({})", name, self.addr),
+            Some(name) => write!(f, "{} ({})", self.addr, name),
             None => write!(f, "{}", self.addr),
         }
     }
