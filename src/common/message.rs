@@ -20,8 +20,8 @@ pub(crate) enum WorkerMessage {
 /// A message sent during file transfer
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) enum TransferMessage {
-    /// Ready to send the specified number of bytes
-    SendReady { length: u64 },
-    /// Ready to receive starting at the specified offset
-    RecvReady { offset: u64 },
+    /// Ready to receive
+    RecvReady { offset: u64, has_compression: bool },
+    /// Ready to send
+    SendReady { length: u64, use_compression: bool },
 }

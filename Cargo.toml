@@ -17,3 +17,4 @@ uuid = { version = "^0.8.1", features = ["serde", "v4"] }
 structopt = { version = "^0.3.8", default-features = false }
 hostname = "^0.3.0"
 crossbeam-channel = "^0.4.0"
+zstd = { version = "^0.5.1", optional = true }
