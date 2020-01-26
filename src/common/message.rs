@@ -1,4 +1,4 @@
-use crate::common::render_task::RenderTask;
+use crate::common::render_task::{RenderTask, RenderTaskResult};
 use serde::{Deserialize, Serialize};
 
 /// A message sent from the server to the worker
@@ -13,8 +13,6 @@ pub(crate) enum ServerMessage {
 pub(crate) enum WorkerMessage {
     /// Connected and ready to render
     Init { name: Option<String> },
-    /// Rendering finished, ready to upload
-    RenderFinished,
-    /// Rendering failed
-    RenderFailed,
+    /// Render task finished with result
+    RenderResult(RenderTaskResult),
 }

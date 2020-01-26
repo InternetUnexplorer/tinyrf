@@ -1,3 +1,4 @@
+use crate::common::file::{get_output_file, get_project_file};
 use crate::common::render_task::RenderTask;
 use failure::Fail;
 use std::io;
@@ -16,9 +17,10 @@ pub(super) enum RenderError {
     OutputError,
 }
 
-pub(super) fn render(task: &RenderTask, project_file: &Path) -> RenderResult<PathBuf> {
-    // Use the frame number as the output file name (four digits, zero-padded)
-    let output_file_name = format!("####.{}", task.output_ext);
+pub(super) fn render(task: &RenderTask, working_dir: &Path) -> RenderResult<PathBuf> {
+    // Get the project and output files for the render task
+    let project_file = get_project_file(working_dir, &task.project_uuid);
+    let output_file = get_output_file(working_dir, task);
 
     // Create and configure the render process
     let mut command = Command::new("blender");
@@ -26,12 +28,11 @@ pub(super) fn render(task: &RenderTask, project_file: &Path) -> RenderResult<Pat
     // See https://docs.blender.org/manual/en/latest/advanced/command_line/arguments.html
     command
         .arg("--background")
+        .arg(&project_file)
         .arg("--render-output")
-        .arg(&project_file.with_file_name(output_file_name))
+        .arg(&output_file.with_file_name(format!("####.{}", task.output_ext)))
         .arg("--render-frame")
-        .arg(&task.frame.to_string())
-        .arg("--")
-        .arg(&project_file);
+        .arg(&task.frame.to_string());
 
     // Discard output
     command.stdout(Stdio::null()).stderr(Stdio::null());
@@ -43,10 +44,6 @@ pub(super) fn render(task: &RenderTask, project_file: &Path) -> RenderResult<Pat
     if !status.success() {
         Err(RenderError::ExitError(status))?;
     }
-
-    // Check whether the output file exists
-    let output_file_name = format!("{:04}.{}", task.frame, task.output_ext);
-    let output_file = project_file.with_file_name(output_file_name);
 
     if output_file.is_file() {
         Ok(output_file)

@@ -1,4 +1,4 @@
-use crate::common::render_task::{Frame, RenderTask};
+use crate::common::render_task::{RenderTask, RenderTaskResult};
 use crate::server::project::Project;
 use crossbeam_channel::{Receiver, Select, Sender};
 use log::info;
@@ -12,7 +12,7 @@ pub(super) struct SchedulerRenderMessage(pub RenderTask);
 
 /// A message sent to the scheduler with the result of a render
 #[derive(Debug)]
-pub(super) struct SchedulerResultMessage((Uuid, Frame), Result<(), ()>);
+pub(super) struct SchedulerResultMessage(pub RenderTask, pub RenderTaskResult);
 
 /// A message sent to the scheduler with a project management task
 #[derive(Debug)]
@@ -110,25 +110,25 @@ impl Scheduler {
 
     /// Handle a result message
     fn handle_result_msg(&mut self, message: SchedulerResultMessage) {
-        let SchedulerResultMessage((project_uuid, frame), result) = message;
+        let SchedulerResultMessage(render_task, result) = message;
         // Get the project the frame belongs to
-        let project = self.projects.get_mut(&project_uuid).unwrap();
+        let project = self.projects.get_mut(&render_task.project_uuid).unwrap();
         // Remove the frame from the assigned queue
-        assert!(project.assigned_frames.remove(&frame));
+        assert!(project.assigned_frames.remove(&render_task.frame));
         // Handle the result
         match result {
             Ok(()) => {
                 // Move the project to the completed queue
-                project.completed_frames.push_back(frame);
+                project.completed_frames.push_back(render_task.frame);
                 // Remove the project if it is completed
                 if project.complete() {
-                    info!("project finished: {}", project.uuid);
+                    info!("project \"{}\"", project);
                     let uuid = project.uuid.clone();
                     assert!(self.projects.remove(&uuid).is_some());
                 }
             }
             // Move the project to the waiting queue
-            Err(()) => project.waiting_frames.push_back(frame),
+            Err(()) => project.waiting_frames.push_back(render_task.frame),
         }
     }
 
@@ -137,7 +137,7 @@ impl Scheduler {
         match message {
             SchedulerManageMessage::AddProject(project) => {
                 // Add the project
-                info!("adding project: {}", &project);
+                info!("adding project \"{}\".", &project);
                 assert!(self
                     .projects
                     .insert(project.uuid.clone(), project)

@@ -27,32 +27,32 @@ where
     writer.flush()
 }
 
-/// Read data into a file
-pub(crate) fn read_file<R>(reader: &mut R, output_file: &Path, length: u64) -> io::Result<()>
-where
-    R: Read,
-{
-    // Open the output file
-    let mut writer = BufWriter::new(
-        OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(output_file)?,
-    );
+/// Read a length-delimited file from the reader
+pub(crate) fn read_file(reader: &mut impl Read, output_file: &Path) -> io::Result<()> {
+    // Open the file for writing
+    let file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(output_file)?;
+    let mut writer = BufWriter::new(file);
+    // Read the length
+    let mut length: [u8; 8] = [0; 8];
+    reader.read_exact(&mut length)?;
+    let length = u64::from_le_bytes(length);
     // Copy the data
-    let written = io::copy(&mut reader.take(length), &mut writer)?;
-    dbg!(length, written);
+    assert!(io::copy(&mut reader.take(length), &mut writer)? == length);
     Ok(())
 }
 
-/// Write data from a file
-pub(crate) fn write_file<W>(writer: &mut W, input_file: &Path) -> io::Result<()>
-where
-    W: Write,
-{
-    // Open the input file
-    let mut reader = BufReader::new(OpenOptions::new().read(true).open(input_file)?);
+/// Write a length-delimited file to the writer
+pub(crate) fn write_file(writer: &mut impl Write, input_file: &Path) -> io::Result<()> {
+    // Open the input file and get its length
+    let file = OpenOptions::new().read(true).open(input_file)?;
+    let length = file.metadata()?.len();
+    let mut reader = BufReader::new(file);
+    // Send the length
+    writer.write_all(&u64::to_le_bytes(length))?;
     // Copy the data
     io::copy(&mut reader, writer)?;
-    Ok(())
+    writer.flush()
 }

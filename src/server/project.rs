@@ -1,5 +1,4 @@
-use crate::common::file_ext::FileExt;
-use crate::common::render_task::Frame;
+use crate::common::render_task::{FileExt, Frame};
 use std::collections::{HashSet, VecDeque};
 use std::fmt;
 use uuid::Uuid;
