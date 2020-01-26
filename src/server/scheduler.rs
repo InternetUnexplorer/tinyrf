@@ -42,12 +42,8 @@ impl Scheduler {
         let (manage_send, manage_recv) = crossbeam_channel::unbounded();
 
         // Create the scheduler
-        let mut scheduler = Scheduler {
-            projects: HashMap::new(),
-            render_send,
-            result_recv,
-            manage_recv,
-        };
+        let mut scheduler =
+            Scheduler { projects: HashMap::new(), render_send, result_recv, manage_recv };
 
         // Start the scheduler in a new thread
         thread::spawn(move || scheduler.run());
@@ -70,10 +66,7 @@ impl Scheduler {
                 // Get the first waiting frame
                 let frame = project.waiting_frames.pop_front().unwrap();
                 // Move it to the assigned frames
-                debug!(
-                    "Moving project {} frame {} to the ASSIGNED queue",
-                    &project.uuid, frame
-                );
+                debug!("Moving project {} frame {} to the ASSIGNED queue", &project.uuid, frame);
                 assert!(project.assigned_frames.insert(frame));
                 // Send a render message
                 let message = SchedulerRenderMessage(RenderTask {
@@ -100,11 +93,7 @@ impl Scheduler {
 
     /// Get the first project with waiting frames
     fn get_waiting_project(&mut self) -> Option<&mut Project> {
-        self.projects
-            .iter_mut()
-            .map(|p| p.1)
-            .filter(|p| p.num_waiting_frames() > 0)
-            .next()
+        self.projects.iter_mut().map(|p| p.1).filter(|p| p.num_waiting_frames() > 0).next()
     }
 
     /// Send a render message and wait for it to be received
@@ -152,10 +141,7 @@ impl Scheduler {
             SchedulerManageMessage::AddProject(project) => {
                 // Add the project
                 info!("Adding project \"{}\"", &project);
-                assert!(self
-                    .projects
-                    .insert(project.uuid.clone(), project)
-                    .is_none());
+                assert!(self.projects.insert(project.uuid.clone(), project).is_none());
             }
         }
     }

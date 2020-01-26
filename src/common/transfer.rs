@@ -20,10 +20,7 @@ pub(crate) fn send_file(
     let (mut file, length) = open_file(file, OpenOptions::new().read(true))?;
     // Wait for the receive ready message
     match read_json(reader)? {
-        TransferMessage::RecvReady {
-            offset,
-            has_compression,
-        } => {
+        TransferMessage::RecvReady { offset, has_compression } => {
             debug!("Receiver reports an offset of {} bytes", offset);
             // Seek to the specified offset in the file
             file.seek(SeekFrom::Start(offset))?;
@@ -31,13 +28,7 @@ pub(crate) fn send_file(
             // Enable compression if both sides support it
             let use_compression = has_compression && cfg!(feature = "zstd");
             // Send the send ready message
-            write_json(
-                writer,
-                SendReady {
-                    length,
-                    use_compression,
-                },
-            )?;
+            write_json(writer, SendReady { length, use_compression })?;
             // Check whether there are bytes to be sent
             if length == 0 {
                 Ok(debug!("File already transferred"))
@@ -53,10 +44,7 @@ pub(crate) fn send_file(
                 Ok(debug!("Transfer complete"))
             }
         }
-        _ => Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Unexpected message",
-        )),
+        _ => Err(io::Error::new(io::ErrorKind::InvalidInput, "Unexpected message")),
     }
 }
 
@@ -70,23 +58,13 @@ pub(crate) fn recv_file(
     // Open the destination file for writing
     let (file, offset) = open_file(file, OpenOptions::new().create(true).append(true))?;
     // Send the receive ready message
-    write_json(
-        writer,
-        RecvReady {
-            offset,
-            has_compression: cfg!(feature = "zstd"),
-        },
-    )?;
+    write_json(writer, RecvReady { offset, has_compression: cfg!(feature = "zstd") })?;
     // Wait for the send ready message
     match read_json(reader)? {
-        TransferMessage::SendReady {
-            length: 0,
-            use_compression: _,
-        } => Ok(debug!("File already transferred")),
-        TransferMessage::SendReady {
-            length,
-            use_compression,
-        } => {
+        TransferMessage::SendReady { length: 0, use_compression: _ } => {
+            Ok(debug!("File already transferred"))
+        }
+        TransferMessage::SendReady { length, use_compression } => {
             debug!("Sender reports a length of {} bytes", length);
             if use_compression {
                 debug!("Sender is using compression");
@@ -115,11 +93,7 @@ fn send_bytes<R: Read, W: Write>(
     use_compression: bool,
 ) -> io::Result<()> {
     // Attempt to create an encoder if using compression
-    let mut writer = if use_compression {
-        encoder(writer)?
-    } else {
-        Box::from(writer)
-    };
+    let mut writer = if use_compression { encoder(writer)? } else { Box::from(writer) };
     // Copy all of the bytes from the reader
     Ok(assert_eq!(io::copy(reader, &mut writer)?, length))
 }
@@ -132,11 +106,7 @@ fn recv_bytes<R: Read, W: Write>(
     use_compression: bool,
 ) -> io::Result<()> {
     // Attempt to create an decoder if using compression
-    let reader = if use_compression {
-        decoder(reader)?
-    } else {
-        Box::from(reader)
-    };
+    let reader = if use_compression { decoder(reader)? } else { Box::from(reader) };
     // Copy all of the bytes to the writer
     if io::copy(&mut reader.take(length), writer)? == length {
         Ok(())
@@ -147,9 +117,7 @@ fn recv_bytes<R: Read, W: Write>(
 
 #[cfg(feature = "zstd")]
 fn encoder<'a>(writer: &'a mut impl Write) -> io::Result<Box<dyn Write + 'a>> {
-    Ok(Box::from(
-        Encoder::new(writer, 0).unwrap().on_finish(|_| ()),
-    ))
+    Ok(Box::from(Encoder::new(writer, 0).unwrap().on_finish(|_| ())))
 }
 
 #[cfg(feature = "zstd")]
@@ -159,16 +127,10 @@ fn decoder<'a>(reader: &'a mut impl Read) -> io::Result<Box<dyn Read + 'a>> {
 
 #[cfg(not(feature = "zstd"))]
 fn encoder<'a>(_writer: &'a mut impl Write) -> io::Result<Box<dyn Write + 'a>> {
-    Err(io::Error::new(
-        io::ErrorKind::InvalidInput,
-        "compression not supported",
-    ))
+    Err(io::Error::new(io::ErrorKind::InvalidInput, "compression not supported"))
 }
 
 #[cfg(not(feature = "zstd"))]
 fn decoder<'a>(_reader: &'a mut impl Read) -> io::Result<Box<dyn Read + 'a>> {
-    Err(io::Error::new(
-        io::ErrorKind::InvalidInput,
-        "compression not supported",
-    ))
+    Err(io::Error::new(io::ErrorKind::InvalidInput, "compression not supported"))
 }

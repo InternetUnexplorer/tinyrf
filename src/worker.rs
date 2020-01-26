@@ -57,9 +57,7 @@ impl<'a> Worker<'a> {
         };
 
         // Send the init message
-        worker.write_message(WorkerMessage::Init {
-            name: worker.name.clone(),
-        })?;
+        worker.write_message(WorkerMessage::Init { name: worker.name.clone() })?;
 
         // Read and handle messages from the server
         loop {
@@ -136,9 +134,7 @@ impl<'a> Worker<'a> {
 
     /// Attempt to get the hostname and convert it to a string
     fn get_hostname() -> Option<String> {
-        hostname::get()
-            .map(|s| String::from(s.to_string_lossy()))
-            .ok()
+        hostname::get().map(|s| String::from(s.to_string_lossy())).ok()
     }
 }
 

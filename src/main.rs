@@ -54,10 +54,7 @@ fn init_logger(debug: bool) {
         true => LevelFilter::Trace,
         false => LevelFilter::Info,
     };
-    env_logger::builder()
-        .filter_level(level)
-        .format_module_path(false)
-        .init();
+    env_logger::builder().filter_level(level).format_module_path(false).init();
 }
 
 /// Run the server, printing an error message on failure

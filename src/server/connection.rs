@@ -123,9 +123,7 @@ impl Connection<'_> {
 
     /// Send the result of a render task to the scheduler
     fn send_result(&mut self, render_task: RenderTask, result: RenderTaskResult) {
-        self.result_send
-            .send(SchedulerResultMessage(render_task, result))
-            .unwrap();
+        self.result_send.send(SchedulerResultMessage(render_task, result)).unwrap();
     }
 }
 
