@@ -12,6 +12,7 @@ pub(super) struct Project {
     pub waiting_frames: VecDeque<Frame>,
     pub assigned_frames: HashSet<Frame>,
     pub completed_frames: VecDeque<Frame>,
+    pub failed_frames: VecDeque<Frame>,
 }
 
 impl Project {
@@ -33,37 +34,48 @@ impl Project {
             waiting_frames,
             assigned_frames: HashSet::new(),
             completed_frames: VecDeque::new(),
+            failed_frames: VecDeque::new(),
         }
     }
 
     /// Check whether all of the frames have been rendered
     pub(super) fn complete(&self) -> bool {
-        self.num_completed_frames() == self.num_frames()
+        self.num_completed() == self.num_frames()
     }
 
     /// Get the ratio of frames that have been completed
     pub(super) fn progress(&self) -> f32 {
-        (self.num_completed_frames() as f32) / (self.num_frames() as f32)
+        (self.num_completed() as f32) / (self.num_frames() as f32)
     }
 
     /// Get the total number of frames
     pub(super) fn num_frames(&self) -> Frame {
-        self.num_waiting_frames() + self.get_assigned_frames() + self.num_completed_frames()
+        self.num_waiting() + self.num_assigned() + self.num_completed() + self.num_failed()
     }
 
     /// Get the number of waiting frames
-    pub(super) fn num_waiting_frames(&self) -> Frame {
+    pub(super) fn num_waiting(&self) -> Frame {
         self.waiting_frames.len() as Frame
     }
 
     /// Get the number of assigned frames
-    pub(super) fn get_assigned_frames(&self) -> Frame {
+    pub(super) fn num_assigned(&self) -> Frame {
         self.assigned_frames.len() as Frame
     }
 
     /// Get the number of completed frames
-    pub(super) fn num_completed_frames(&self) -> Frame {
+    pub(super) fn num_completed(&self) -> Frame {
         self.completed_frames.len() as Frame
+    }
+
+    /// Get the number of failed frames
+    pub(super) fn num_failed(&self) -> Frame {
+        self.failed_frames.len() as Frame
+    }
+
+    /// Move all of the failed frames back to the waiting queue
+    pub(super) fn retry_failed(&mut self) {
+        self.waiting_frames.append(&mut self.failed_frames);
     }
 }
 

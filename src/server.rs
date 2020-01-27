@@ -43,7 +43,15 @@ impl Server {
         info!("Server started!");
 
         // Add a test project
-        let project = Project::new("Test Project".into(), FileExt::PNG, 1, 10);
+        let project = Project::new("Test Project 1".into(), FileExt::PNG, 1, 5);
+        let project_file = get_project_file(&working_dir, &project.uuid);
+        std::fs::create_dir(project_file.parent().unwrap()).unwrap();
+        std::fs::copy("/tmp/untitled.blend", project_file).unwrap();
+        let message = SchedulerManageMessage::AddProject(project);
+        manage_send.send(message).unwrap();
+
+        // Add a test project
+        let project = Project::new("Test Project 2".into(), FileExt::PNG, 1, 3);
         let project_file = get_project_file(&working_dir, &project.uuid);
         std::fs::create_dir(project_file.parent().unwrap()).unwrap();
         std::fs::copy("/tmp/untitled.blend", project_file).unwrap();

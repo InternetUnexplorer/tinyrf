@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 /// A message sent from the server to the worker
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) enum ServerMessage {
+    /// There are currently no tasks available
+    Idle,
     /// Start a new render
     StartRender(RenderTask),
 }

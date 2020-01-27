@@ -1,8 +1,8 @@
 use crate::common::render_task::{RenderTask, RenderTaskResult};
 use crate::server::project::Project;
 use crossbeam_channel::{Receiver, Select, Sender};
-use log::{debug, info};
-use std::collections::HashMap;
+use log::{debug, error, info};
+use std::collections::{HashMap, VecDeque};
 use std::thread;
 use uuid::Uuid;
 
@@ -17,11 +17,15 @@ pub(super) struct SchedulerResultMessage(pub RenderTask, pub RenderTaskResult);
 /// A message sent to the scheduler with a project management task
 #[derive(Debug)]
 pub(super) enum SchedulerManageMessage {
+    // Add a project to the queue
     AddProject(Project),
+    // Retry a project's failed frames
+    RetryFailed(Uuid),
 }
 
 pub(crate) struct Scheduler {
     projects: HashMap<Uuid, Project>,
+    queue: VecDeque<Uuid>,
     render_send: Sender<SchedulerRenderMessage>,
     result_recv: Receiver<SchedulerResultMessage>,
     manage_recv: Receiver<SchedulerManageMessage>,
@@ -42,8 +46,13 @@ impl Scheduler {
         let (manage_send, manage_recv) = crossbeam_channel::unbounded();
 
         // Create the scheduler
-        let mut scheduler =
-            Scheduler { projects: HashMap::new(), render_send, result_recv, manage_recv };
+        let mut scheduler = Scheduler {
+            projects: HashMap::new(),
+            queue: VecDeque::new(),
+            render_send,
+            result_recv,
+            manage_recv,
+        };
 
         // Start the scheduler in a new thread
         thread::spawn(move || scheduler.run());
@@ -61,21 +70,14 @@ impl Scheduler {
         selector.recv(&manage_recv);
 
         loop {
-            // If there is a project waiting, send a render message
-            if let Some(project) = self.get_waiting_project() {
-                // Get the first waiting frame
-                let frame = project.waiting_frames.pop_front().unwrap();
-                // Move it to the assigned frames
-                debug!("Moving project {} frame {} to the ASSIGNED queue", &project.uuid, frame);
-                assert!(project.assigned_frames.insert(frame));
-                // Send a render message
-                let message = SchedulerRenderMessage(RenderTask {
-                    project_uuid: project.uuid.clone(),
-                    project_name: project.name.clone(),
-                    frame,
-                    output_ext: project.output_ext,
-                });
-                self.send_render_msg(message);
+            // Check if there is a project with waiting frames
+            if let Some(project_uuid) = self.queue.pop_front() {
+                // Assign the first waiting frame and send a render message
+                self.assign_first_waiting_frame(&project_uuid);
+                // Move the project back into the queue if it still has waiting frames
+                if self.projects.get(&project_uuid).unwrap().num_waiting() > 0 {
+                    self.queue.push_back(project_uuid)
+                }
             } else {
                 // Block until there are messages
                 let _ = selector.ready();
@@ -91,13 +93,21 @@ impl Scheduler {
         }
     }
 
-    /// Get the first project with waiting frames
-    fn get_waiting_project(&mut self) -> Option<&mut Project> {
-        self.projects.iter_mut().map(|p| p.1).filter(|p| p.num_waiting_frames() > 0).next()
-    }
-
-    /// Send a render message and wait for it to be received
-    fn send_render_msg(&mut self, message: SchedulerRenderMessage) {
+    /// Assign the first waiting frame of a project and send a render message
+    fn assign_first_waiting_frame(&mut self, project_uuid: &Uuid) {
+        // Get the first waiting frame of the project
+        let project = self.projects.get_mut(&project_uuid).unwrap();
+        let frame = project.waiting_frames.pop_front().unwrap();
+        // Move the frame to the assigned queue
+        debug!("Moving project {} frame {} to the ASSIGNED queue", &project.uuid, frame);
+        assert!(project.assigned_frames.insert(frame));
+        // Send a render message
+        let message = SchedulerRenderMessage(RenderTask {
+            project_uuid: project.uuid.clone(),
+            project_name: project.name.clone(),
+            frame,
+            output_ext: project.output_ext,
+        });
         self.render_send.send(message).unwrap();
     }
 
@@ -111,37 +121,54 @@ impl Scheduler {
         // Handle the result
         match result {
             Ok(()) => {
-                // Move the project to the completed queue
+                // Move the frame to the completed queue
                 debug!(
                     "Moving project {} frame {} to the COMPLETED queue",
                     &render_task.project_uuid, render_task.frame
                 );
                 project.completed_frames.push_back(render_task.frame);
-                // Remove the project if it is completed
+                // Print a message if the project is complete
                 if project.complete() {
                     info!("Project \"{}\" is finished", project);
-                    let uuid = project.uuid.clone();
-                    assert!(self.projects.remove(&uuid).is_some());
                 }
             }
             Err(()) => {
-                // Move the project to the waiting queue
+                // Move the frame to the failed queue
                 debug!(
-                    "Moving project {} frame {} to the WAITING queue",
+                    "Moving project {} frame {} to the FAILED queue",
                     &render_task.project_uuid, render_task.frame
                 );
-                project.waiting_frames.push_back(render_task.frame)
+                project.failed_frames.push_back(render_task.frame);
             }
+        }
+        // If this was the last assigned frame, check if there are failed frames
+        if project.num_waiting() == 0 && project.num_assigned() == 0 && project.num_failed() > 0 {
+            error!("Some frames of \"{}\" failed to render", project);
         }
     }
 
     /// Handle a management message
     fn handle_manage_msg(&mut self, message: SchedulerManageMessage) {
         match message {
+            // Add a project to the queue
             SchedulerManageMessage::AddProject(project) => {
-                // Add the project
                 info!("Adding project \"{}\"", &project);
+                self.queue.push_back(project.uuid.clone());
                 assert!(self.projects.insert(project.uuid.clone(), project).is_none());
+            }
+            // Retry a project's failed frames
+            SchedulerManageMessage::RetryFailed(project_uuid) => {
+                match self.projects.get_mut(&project_uuid) {
+                    Some(project) => {
+                        // Move failed frames back to the waiting queue
+                        project.retry_failed();
+                        // Add the project to the queue if it is not already present
+                        if !self.queue.contains(&project_uuid) {
+                            self.queue.push_back(project_uuid);
+                        }
+                    }
+                    None => error!("Project {} not found", project_uuid),
+                }
             }
         }
     }

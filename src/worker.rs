@@ -69,6 +69,7 @@ impl<'a> Worker<'a> {
     /// Handle a message from the server
     fn handle_message(&mut self, message: ServerMessage) -> WorkerResult<()> {
         match message {
+            ServerMessage::Idle => Ok(info!("Idle")),
             ServerMessage::StartRender(task) => {
                 // Download the project file
                 info!("Downloading project \"{}\"...", task.project_name);

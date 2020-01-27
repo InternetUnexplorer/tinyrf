@@ -4,14 +4,14 @@ use crate::common::net::{read_json, write_json};
 use crate::common::render_task::{RenderTask, RenderTaskResult};
 use crate::common::transfer::{recv_file, send_file};
 use crate::server::scheduler::{SchedulerRenderMessage, SchedulerResultMessage};
+use crossbeam_channel::internal::SelectHandle;
 use crossbeam_channel::{Receiver, Sender};
 use failure::Fail;
 use log::{debug, error, info};
 use std::io::{BufReader, BufWriter};
 use std::net::{IpAddr, TcpStream};
 use std::path::Path;
-use std::time::Duration;
-use std::{fmt, io, thread};
+use std::{fmt, io};
 
 pub(super) struct Connection<'a> {
     name: Option<String>,
@@ -64,6 +64,13 @@ impl Connection<'_> {
 
             // Wait for and handle render tasks until an error occurs
             let error = loop {
+                // Let the worker know if there are no tasks currently available
+                // TODO: wait for a bit?
+                if !connection.render_recv.is_ready() {
+                    if let Err(error) = connection.write_message(ServerMessage::Idle) {
+                        break error;
+                    }
+                }
                 // Wait for a render task from the scheduler
                 let render_task = connection.render_recv.recv().unwrap().0;
                 debug!("Received task from scheduler: {:?}", &render_task);
@@ -71,14 +78,8 @@ impl Connection<'_> {
                 let result = connection.handle_render_task(render_task.clone());
                 // Handle the result
                 match result {
-                    // Task finished successfully
-                    Ok(Ok(())) => connection.send_result(render_task, Ok(())),
-                    // Task finished with error
-                    Ok(Err(())) => {
-                        connection.send_result(render_task, Err(()));
-                        // Wait a bit before checking for a new task
-                        thread::sleep(Duration::from_secs(5));
-                    }
+                    // Task finished with result
+                    Ok(result) => connection.send_result(render_task, result),
                     // Communication error
                     Err(error) => {
                         connection.send_result(render_task, Err(()));
