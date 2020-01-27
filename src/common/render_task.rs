@@ -16,16 +16,26 @@ pub(crate) struct RenderTask {
 /// The result of a render task
 pub(crate) type RenderTaskResult = Result<(), ()>;
 
+/// The extension of an output file of a render task
 #[derive(Debug, Deserialize, Serialize, Copy, Clone)]
 pub(crate) enum FileExt {
-    PNG,
+    BMP, // BMP
+    RGB, // Iris
+    PNG, // PNG
+    JPG, // JPEG
+    JP2, // JPEG 2000
+    TGA, // Targa/Targa Raw
 }
 
 impl fmt::Display for FileExt {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let extension = match self {
-            Self::PNG => "png",
-        };
-        write!(f, "{}", extension)
+        match self {
+            Self::BMP => write!(f, "bmp"),
+            Self::RGB => write!(f, "rgb"),
+            Self::PNG => write!(f, "png"),
+            Self::JPG => write!(f, "jpg"),
+            Self::JP2 => write!(f, "jp2"),
+            Self::TGA => write!(f, "tga"),
+        }
     }
 }
