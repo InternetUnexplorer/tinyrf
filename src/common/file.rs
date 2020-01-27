@@ -17,14 +17,18 @@ pub(crate) fn init_working_dir(prefix: &str) -> io::Result<PathBuf> {
     Ok(working_dir)
 }
 
+/// Get the path to the directory for the specified project
+pub(crate) fn get_project_dir(working_dir: &Path, project_uuid: &Uuid) -> PathBuf {
+    working_dir.join(project_uuid.to_string())
+}
+
 /// Get the path to the project file for the specified project
 pub(crate) fn get_project_file(working_dir: &Path, project_uuid: &Uuid) -> PathBuf {
-    working_dir.join(project_uuid.to_string()).join("project.blend")
+    get_project_dir(working_dir, project_uuid).join("project.blend")
 }
 
 /// Get the path to the output file for the specified render task
 pub(crate) fn get_output_file(working_dir: &Path, render_task: &RenderTask) -> PathBuf {
-    working_dir
-        .join(render_task.project_uuid.to_string())
+    get_project_dir(working_dir, &render_task.project_uuid)
         .join(format!("{:04}.{}", render_task.frame, render_task.output_ext))
 }

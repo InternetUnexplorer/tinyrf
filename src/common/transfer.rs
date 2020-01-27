@@ -44,7 +44,7 @@ pub(crate) fn send_file(
                 Ok(debug!("Transfer complete"))
             }
         }
-        _ => Err(io::Error::new(io::ErrorKind::InvalidInput, "Unexpected message")),
+        _ => Err(io::Error::new(io::ErrorKind::InvalidInput, "unexpected message")),
     }
 }
 

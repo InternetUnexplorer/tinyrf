@@ -10,7 +10,8 @@ use log::{debug, error, info};
 use std::io::{BufReader, BufWriter};
 use std::net::{IpAddr, TcpStream};
 use std::path::Path;
-use std::{fmt, io};
+use std::time::Duration;
+use std::{fmt, io, thread};
 
 pub(super) struct Connection<'a> {
     name: Option<String>,
@@ -70,7 +71,15 @@ impl Connection<'_> {
                 let result = connection.handle_render_task(render_task.clone());
                 // Handle the result
                 match result {
-                    Ok(result) => connection.send_result(render_task, result),
+                    // Task finished successfully
+                    Ok(Ok(())) => connection.send_result(render_task, Ok(())),
+                    // Task finished with error
+                    Ok(Err(())) => {
+                        connection.send_result(render_task, Err(()));
+                        // Wait a bit before checking for a new task
+                        thread::sleep(Duration::from_secs(5));
+                    }
+                    // Communication error
                     Err(error) => {
                         connection.send_result(render_task, Err(()));
                         break error;

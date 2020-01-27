@@ -1,6 +1,6 @@
 mod render;
 
-use crate::common::file::{get_project_file, init_working_dir};
+use crate::common::file::{get_project_dir, get_project_file, init_working_dir};
 use crate::common::message::{ServerMessage, WorkerMessage};
 use crate::common::net::{read_json, write_json};
 use crate::common::transfer::{recv_file, send_file};
@@ -37,7 +37,7 @@ impl<'a> Worker<'a> {
     /// Connect to the server and handle messages
     pub(super) fn connect(name: Option<String>, address: &str, port: u16) -> WorkerResult<()> {
         // If no name has been specified, try to use the hostname
-        let name = name.or_else(Self::get_hostname);
+        let name = name.or_else(|| hostname::get().ok().and_then(|s| s.into_string().ok()));
 
         // Initialize the working directory
         let working_dir = init_working_dir("worker").map_err(WorkerError::WorkingDirError)?;
@@ -77,10 +77,7 @@ impl<'a> Worker<'a> {
                 info!("Rendering frame {}...", task.frame);
                 match render::render(&task, &self.working_dir) {
                     Ok(output_file) => {
-                        info!(
-                            "Uploading file \"{}\"...",
-                            output_file.file_name().unwrap().to_string_lossy()
-                        );
+                        info!("Uploading file {:?}...", output_file.file_name().unwrap());
                         // Send the result to the server
                         self.write_message(WorkerMessage::RenderResult(Ok(())))?;
                         // Upload the output file
@@ -99,13 +96,13 @@ impl<'a> Worker<'a> {
 
     /// Download the project file for a render task
     fn download_project(&mut self, project_uuid: &Uuid) -> WorkerResult<()> {
-        let project_file = get_project_file(&self.working_dir, project_uuid);
         // Create the parent directory if it does not exist
-        let project_dir = project_file.parent().unwrap();
+        let project_dir = get_project_dir(&self.working_dir, project_uuid);
         if !project_dir.is_dir() {
             fs::create_dir(project_dir)?;
         }
         // Download the file
+        let project_file = get_project_file(&self.working_dir, project_uuid);
         recv_file(&mut self.reader, &mut self.writer, &project_file)
             .map_err(WorkerError::TransferError)
     }
@@ -130,11 +127,6 @@ impl<'a> Worker<'a> {
     fn write_message(&mut self, message: WorkerMessage) -> io::Result<()> {
         debug!("Server <- {:?}", &message);
         write_json(&mut self.writer, message)
-    }
-
-    /// Attempt to get the hostname and convert it to a string
-    fn get_hostname() -> Option<String> {
-        hostname::get().map(|s| String::from(s.to_string_lossy())).ok()
     }
 }
 

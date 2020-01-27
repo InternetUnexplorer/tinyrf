@@ -9,11 +9,11 @@ pub(super) type RenderResult<T> = Result<T, RenderError>;
 
 #[derive(Fail, Debug)]
 pub(super) enum RenderError {
-    #[fail(display = "Error starting process: {}", 0)]
+    #[fail(display = "error starting process: {}", 0)]
     InitError(#[fail(cause)] io::Error),
-    #[fail(display = "Process exited with error: {}", 0)]
+    #[fail(display = "process exited with error: {}", 0)]
     ExitError(ExitStatus),
-    #[fail(display = "Output file missing")]
+    #[fail(display = "output file missing")]
     OutputError,
 }
 
