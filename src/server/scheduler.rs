@@ -1,10 +1,15 @@
 use crate::common::render_task::{RenderTask, RenderTaskResult};
 use crate::server::project::Project;
+use crossbeam_channel::internal::SelectHandle;
 use crossbeam_channel::{Receiver, Select, Sender};
 use log::{debug, error, info};
 use std::collections::{HashMap, VecDeque};
 use std::thread;
 use uuid::Uuid;
+
+/// The maximum number of tasks that can be waiting in the render channel
+/// This must be greater than 0, otherwise the scheduler will not add any tasks (would block)
+const RENDER_CHANNEL_SIZE: usize = 2;
 
 /// A message sent by the scheduler with a frame to render
 #[derive(Debug)]
@@ -38,8 +43,8 @@ impl Scheduler {
         Sender<SchedulerResultMessage>,
         Sender<SchedulerManageMessage>,
     ) {
-        // Initialize render message channel (blocking)
-        let (render_send, render_recv) = crossbeam_channel::bounded(0);
+        // Initialize render message channel
+        let (render_send, render_recv) = crossbeam_channel::bounded(RENDER_CHANNEL_SIZE);
         // Initialize result message channel
         let (result_send, result_recv) = crossbeam_channel::unbounded();
         // Initialize management message channel
@@ -70,19 +75,20 @@ impl Scheduler {
         selector.recv(&manage_recv);
 
         loop {
-            // Check if there is a project with waiting frames
-            if let Some(project_uuid) = self.queue.pop_front() {
+            // Send render messages while the queue is not empty and the channel has space
+            while !self.queue.is_empty() && self.render_send.is_ready() {
+                // Get the first project in the queue
+                let project_uuid = self.queue.pop_front().unwrap();
                 // Assign the first waiting frame and send a render message
                 self.assign_first_waiting_frame(&project_uuid);
                 // Move the project back into the queue if it still has waiting frames
                 if self.projects.get(&project_uuid).unwrap().num_waiting() > 0 {
                     self.queue.push_back(project_uuid)
                 }
-            } else {
-                // Block until there are messages
-                let _ = selector.ready();
             }
-            // Handle messages
+            // Block until there are messages
+            let _ = selector.ready();
+            // Handle result messages
             while let Ok(message) = self.result_recv.try_recv() {
                 self.handle_result_msg(message);
             }

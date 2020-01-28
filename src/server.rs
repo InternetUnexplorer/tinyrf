@@ -7,9 +7,11 @@ use crate::common::render_task::FileExt;
 use crate::server::connection::Connection;
 use crate::server::project::Project;
 use crate::server::scheduler::{Scheduler, SchedulerManageMessage};
+use crossbeam_channel::Sender;
 use failure::Fail;
 use log::{debug, info};
 use std::net::TcpListener;
+use std::path::Path;
 use std::{io, thread};
 
 pub(super) type ServerResult<T> = Result<T, ServerError>;
@@ -42,21 +44,11 @@ impl Server {
 
         info!("Server started!");
 
-        // Add a test project
-        let project = Project::new("Test Project 1".into(), FileExt::PNG, 1, 5);
-        let project_file = get_project_file(&working_dir, &project.uuid);
-        std::fs::create_dir(project_file.parent().unwrap()).unwrap();
-        std::fs::copy("/tmp/untitled.blend", project_file).unwrap();
-        let message = SchedulerManageMessage::AddProject(project);
-        manage_send.send(message).unwrap();
-
-        // Add a test project
-        let project = Project::new("Test Project 2".into(), FileExt::PNG, 1, 3);
-        let project_file = get_project_file(&working_dir, &project.uuid);
-        std::fs::create_dir(project_file.parent().unwrap()).unwrap();
-        std::fs::copy("/tmp/untitled.blend", project_file).unwrap();
-        let message = SchedulerManageMessage::AddProject(project);
-        manage_send.send(message).unwrap();
+        // Add some test projects
+        for index in 1..=4 {
+            let project = Project::new(format!("Project {}", index), FileExt::PNG, 1, index * 2);
+            Self::add_dummy_project(project, &working_dir, &manage_send);
+        }
 
         // Handle incoming connections
         for stream in listener.incoming().filter_map(|stream| stream.ok()) {
@@ -70,5 +62,21 @@ impl Server {
             });
         }
         unreachable!();
+    }
+
+    // Send a project to the scheduler, copying the project file from /tmp/untitled.blend
+    fn add_dummy_project(
+        project: Project,
+        working_dir: &Path,
+        manage_send: &Sender<SchedulerManageMessage>,
+    ) {
+        // Copy the project file from /tmp/untitled.blend
+        let project_file = get_project_file(working_dir, &project.uuid);
+        std::fs::create_dir(project_file.parent().unwrap())
+            .expect("unable to create project directory");
+        std::fs::copy("/tmp/untitled.blend", project_file)
+            .expect("unable to copy dummy project file");
+        // Send the project to the scheduler
+        manage_send.send(SchedulerManageMessage::AddProject(project)).unwrap();
     }
 }

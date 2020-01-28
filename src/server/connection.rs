@@ -65,7 +65,6 @@ impl Connection<'_> {
             // Wait for and handle render tasks until an error occurs
             let error = loop {
                 // Let the worker know if there are no tasks currently available
-                // TODO: wait for a bit?
                 if !connection.render_recv.is_ready() {
                     if let Err(error) = connection.write_message(ServerMessage::Idle) {
                         break error;
