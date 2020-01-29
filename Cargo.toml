@@ -5,7 +5,8 @@ authors = ["InternetUnexplorer <internetunexplorer@gmail.com>"]
 license = "Unlicense"
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["zstd"]
 
 [dependencies]
 log = "^0.4.8"
