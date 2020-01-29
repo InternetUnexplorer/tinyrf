@@ -30,9 +30,9 @@ enum ConnectionError {
     #[fail(display = "I/O error: {}", 0)]
     IoError(#[fail(cause)] io::Error),
     #[fail(display = "Error transferring file: {}", 0)]
-    TransferError(#[fail(cause)] io::Error),
+    TransferFailed(#[fail(cause)] io::Error),
     #[fail(display = "Unexpected message: {:?}", 0)]
-    MessageError(WorkerMessage),
+    UnexpectedMessage(WorkerMessage),
 }
 
 impl Connection<'_> {
@@ -101,7 +101,7 @@ impl Connection<'_> {
         self.write_message(ServerMessage::StartRender(render_task.clone()))?;
         // Send the project file to the worker
         send_file(&mut self.reader, &mut self.writer, &project_file)
-            .map_err(ConnectionError::TransferError)?;
+            .map_err(ConnectionError::TransferFailed)?;
         // Wait for a result message from the worker
         match self.read_message()? {
             WorkerMessage::RenderResult(result) => {
@@ -109,11 +109,11 @@ impl Connection<'_> {
                 if result.is_ok() {
                     let output_file = get_output_file(self.project_dir, &render_task);
                     recv_file(&mut self.reader, &mut self.writer, &output_file)
-                        .map_err(ConnectionError::TransferError)?;
+                        .map_err(ConnectionError::TransferFailed)?;
                 }
                 Ok(result)
             }
-            message => Err(ConnectionError::MessageError(message)),
+            message => Err(ConnectionError::UnexpectedMessage(message)),
         }
     }
 

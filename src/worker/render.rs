@@ -10,11 +10,11 @@ pub(super) type RenderResult<T> = Result<T, RenderError>;
 #[derive(Fail, Debug)]
 pub(super) enum RenderError {
     #[fail(display = "error starting process: {}", 0)]
-    InitError(#[fail(cause)] io::Error),
+    ExecFailed(#[fail(cause)] io::Error),
     #[fail(display = "process exited with error: {}", 0)]
-    ExitError(ExitStatus),
+    ExitStatus(ExitStatus),
     #[fail(display = "output file missing")]
-    OutputError,
+    OutputMissing,
 }
 
 pub(super) fn render(task: &RenderTask, working_dir: &Path) -> RenderResult<PathBuf> {
@@ -42,19 +42,19 @@ pub(super) fn render(task: &RenderTask, working_dir: &Path) -> RenderResult<Path
 
     // Check for a nonzero status code
     if !status.success() {
-        Err(RenderError::ExitError(status))?;
+        return Err(RenderError::ExitStatus(status));
     }
 
     // Check whether the output file is present
     if output_file.is_file() {
         Ok(output_file)
     } else {
-        Err(RenderError::OutputError)
+        Err(RenderError::OutputMissing)
     }
 }
 
 impl From<io::Error> for RenderError {
     fn from(error: io::Error) -> Self {
-        Self::InitError(error)
+        Self::ExecFailed(error)
     }
 }

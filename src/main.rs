@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // TODO: for prototyping
 
 mod common;
 mod server;
@@ -53,9 +53,6 @@ fn main() {
 
 /// Configure and initialize the global logger
 fn init_logger(debug: bool) {
-    let level = match debug {
-        true => LevelFilter::Trace,
-        false => LevelFilter::Info,
-    };
+    let level = if debug { LevelFilter::Trace } else { LevelFilter::Info };
     env_logger::builder().filter_level(level).format_module_path(false).init();
 }

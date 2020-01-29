@@ -109,7 +109,7 @@ impl Scheduler {
         assert!(project.assigned_frames.insert(frame));
         // Send a render message
         let message = SchedulerRenderMessage(RenderTask {
-            project_uuid: project.uuid.clone(),
+            project_uuid: project.uuid,
             project_name: project.name.clone(),
             frame,
             output_ext: project.output_ext,

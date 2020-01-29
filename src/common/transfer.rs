@@ -31,7 +31,8 @@ pub(crate) fn send_file(
             write_json(writer, SendReady { length, use_compression })?;
             // Check whether there are bytes to be sent
             if length == 0 {
-                Ok(debug!("File already transferred"))
+                debug!("File already transferred");
+                Ok(())
             } else {
                 if use_compression {
                     debug!("Receiver is using compression");
@@ -41,7 +42,8 @@ pub(crate) fn send_file(
                 send_bytes(&mut BufReader::new(file), writer, length, use_compression)?;
                 // Flush the writer to ensure everything is sent
                 writer.flush()?;
-                Ok(debug!("Transfer complete"))
+                debug!("Transfer complete");
+                Ok(())
             }
         }
         _ => Err(io::Error::new(io::ErrorKind::InvalidInput, "unexpected message")),
@@ -61,8 +63,9 @@ pub(crate) fn recv_file(
     write_json(writer, RecvReady { offset, has_compression: cfg!(feature = "zstd") })?;
     // Wait for the send ready message
     match read_json(reader)? {
-        TransferMessage::SendReady { length: 0, use_compression: _ } => {
-            Ok(debug!("File already transferred"))
+        TransferMessage::SendReady { length: 0, .. } => {
+            debug!("File already transferred");
+            Ok(())
         }
         TransferMessage::SendReady { length, use_compression } => {
             debug!("Sender reports a length of {} bytes", length);
@@ -95,7 +98,8 @@ fn send_bytes<R: Read, W: Write>(
     // Attempt to create an encoder if using compression
     let mut writer = if use_compression { encoder(writer)? } else { Box::from(writer) };
     // Copy all of the bytes from the reader
-    Ok(assert_eq!(io::copy(reader, &mut writer)?, length))
+    assert_eq!(io::copy(reader, &mut writer)?, length);
+    Ok(())
 }
 
 /// Receive an exact number of bytes, optionally using compression

@@ -19,13 +19,13 @@ pub(super) type WorkerResult<T> = Result<T, WorkerError>;
 #[derive(Fail, Debug)]
 pub(super) enum WorkerError {
     #[fail(display = "Error initializing working directory: {}", 0)]
-    WorkingDirError(#[fail(cause)] io::Error),
+    WorkingDirInitFailed(#[fail(cause)] io::Error),
     #[fail(display = "Error connecting to server: {}", 0)]
-    ConnectError(#[fail(cause)] io::Error),
+    ConnectFailed(#[fail(cause)] io::Error),
     #[fail(display = "I/O error: {}", 0)]
     IoError(#[fail(cause)] io::Error),
     #[fail(display = "Error transferring file: {}", 0)]
-    TransferError(#[fail(cause)] io::Error),
+    TransferFailed(#[fail(cause)] io::Error),
 }
 
 pub(super) struct Worker<'a> {
@@ -42,13 +42,13 @@ impl<'a> Worker<'a> {
         let name = args.name.or_else(|| hostname::get().ok().and_then(|s| s.into_string().ok()));
 
         // Initialize the working directory
-        let working_dir = init_working_dir("worker").map_err(WorkerError::WorkingDirError)?;
+        let working_dir = init_working_dir("worker").map_err(WorkerError::WorkingDirInitFailed)?;
 
         info!("Connecting to {}:{}...", args.address, args.port);
 
         // Attempt to open a connection to the server
         let stream = TcpStream::connect((args.address.as_str(), args.port))
-            .map_err(WorkerError::ConnectError)?;
+            .map_err(WorkerError::ConnectFailed)?;
 
         info!("Connected to server!");
 
@@ -72,7 +72,10 @@ impl<'a> Worker<'a> {
     /// Handle a message from the server
     fn handle_message(&mut self, message: ServerMessage) -> WorkerResult<()> {
         match message {
-            ServerMessage::Idle => Ok(info!("Idle")),
+            ServerMessage::Idle => {
+                info!("Idle");
+                Ok(())
+            },
             ServerMessage::StartRender(task) => {
                 // Download the project file
                 info!("Downloading project \"{}\"...", task.project_name);
@@ -86,7 +89,8 @@ impl<'a> Worker<'a> {
                         self.write_message(WorkerMessage::RenderResult(Ok(())))?;
                         // Upload the output file
                         self.upload_output(&output_file)?;
-                        Ok(info!("Upload complete"))
+                        info!("Upload complete");
+                        Ok(())
                     }
                     Err(error) => {
                         error!("Render failed: {}", error);
@@ -108,14 +112,14 @@ impl<'a> Worker<'a> {
         // Download the file
         let project_file = get_project_file(&self.working_dir, project_uuid);
         recv_file(&mut self.reader, &mut self.writer, &project_file)
-            .map_err(WorkerError::TransferError)
+            .map_err(WorkerError::TransferFailed)
     }
 
     /// Upload the output of a render
     fn upload_output(&mut self, output_file: &Path) -> WorkerResult<()> {
         // Upload the file
         send_file(&mut self.reader, &mut self.writer, output_file)
-            .map_err(WorkerError::TransferError)?;
+            .map_err(WorkerError::TransferFailed)?;
         // Remove the file after uploading
         Ok(fs::remove_file(output_file)?)
     }
