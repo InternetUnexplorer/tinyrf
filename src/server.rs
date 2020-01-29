@@ -1,9 +1,11 @@
-pub(crate) mod connection;
-pub(crate) mod project;
-pub(crate) mod scheduler;
+pub(super) mod args;
+mod connection;
+mod project;
+mod scheduler;
 
 use crate::common::file::{get_project_file, init_working_dir};
 use crate::common::render_task::FileExt;
+use crate::server::args::ServerArgs;
 use crate::server::connection::Connection;
 use crate::server::project::Project;
 use crate::server::scheduler::{Scheduler, SchedulerManageMessage};
@@ -27,16 +29,17 @@ pub(super) enum ServerError {
 pub(super) struct Server {}
 
 impl Server {
-    /// Start the server
-    pub(super) fn run(address: &str, port: u16) -> ServerResult<()> {
-        info!("Starting server on {}:{}...", address, port);
+    /// Run the server
+    pub(super) fn run(args: ServerArgs) -> ServerResult<()> {
+        info!("Starting server on {}:{}...", args.address, args.port);
 
         // Initialize the working directory
         let working_dir = init_working_dir("server").map_err(ServerError::WorkingDirError)?;
 
         // Bind to the socket
         debug!("Binding to socket...");
-        let listener = TcpListener::bind((address, port)).map_err(ServerError::InitError)?;
+        let listener = TcpListener::bind((args.address.as_str(), args.port))
+            .map_err(ServerError::InitError)?;
 
         // Start the scheduler in a new thread
         debug!("Starting scheduler...");

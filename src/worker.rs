@@ -1,9 +1,11 @@
+pub(super) mod args;
 mod render;
 
 use crate::common::file::{get_project_dir, get_project_file, init_working_dir};
 use crate::common::message::{ServerMessage, WorkerMessage};
 use crate::common::net::{read_json, write_json};
 use crate::common::transfer::{recv_file, send_file};
+use crate::worker::args::WorkerArgs;
 use failure::Fail;
 use log::{debug, error, info};
 use std::io::{BufReader, BufWriter};
@@ -35,17 +37,18 @@ pub(super) struct Worker<'a> {
 
 impl<'a> Worker<'a> {
     /// Connect to the server and handle messages
-    pub(super) fn connect(name: Option<String>, address: &str, port: u16) -> WorkerResult<()> {
+    pub(super) fn run(args: WorkerArgs) -> WorkerResult<()> {
         // If no name has been specified, try to use the hostname
-        let name = name.or_else(|| hostname::get().ok().and_then(|s| s.into_string().ok()));
+        let name = args.name.or_else(|| hostname::get().ok().and_then(|s| s.into_string().ok()));
 
         // Initialize the working directory
         let working_dir = init_working_dir("worker").map_err(WorkerError::WorkingDirError)?;
 
-        info!("Connecting to {}:{}...", address, port);
+        info!("Connecting to {}:{}...", args.address, args.port);
 
         // Attempt to open a connection to the server
-        let stream = TcpStream::connect((address, port)).map_err(WorkerError::ConnectError)?;
+        let stream = TcpStream::connect((args.address.as_str(), args.port))
+            .map_err(WorkerError::ConnectError)?;
 
         info!("Connected to server!");
 

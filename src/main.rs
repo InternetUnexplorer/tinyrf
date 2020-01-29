@@ -1,50 +1,53 @@
-#![allow(dead_code)] // TODO: for prototyping
+#![allow(dead_code)]
 
 mod common;
 mod server;
 mod worker;
 
+use crate::server::args::ServerArgs;
+use crate::worker::args::WorkerArgs;
 use crate::{server::Server, worker::Worker};
+use failure::Error;
 use log::{error, LevelFilter};
 use std::process::exit;
 use structopt::StructOpt;
 
-#[derive(Debug, StructOpt)]
+#[derive(StructOpt)]
 #[structopt(name = "tinyrf", about = "A simple Blender render farm")]
-struct Config {
-    /// Hosts a server
-    #[structopt(short = "s", long = "server")]
-    server: bool,
-
-    /// Enables debugging messages
-    #[structopt(short = "v", long = "verbose")]
+struct Args {
+    /// Enables debugging information
+    #[structopt(short = "v", long = "verbose", global = true)]
     verbose: bool,
+    #[structopt(subcommand)]
+    command: Command,
+}
 
-    /// Server address
-    #[structopt(name = "ADDRESS", default_value = "localhost")]
-    address: String,
-
-    /// Server port
-    #[structopt(short = "p", long = "port", default_value = "4049")]
-    port: u16,
-
-    /// Worker name
-    #[structopt(short = "n", long = "name")]
-    name: Option<String>,
+#[derive(StructOpt)]
+enum Command {
+    /// Joins a server as a client
+    Client,
+    /// Hosts a server
+    Server(ServerArgs),
+    /// Joins a server as a worker
+    Worker(WorkerArgs),
 }
 
 fn main() {
     // Parse command-line arguments
-    let config = Config::from_args();
+    let args = Args::from_args();
 
     // Set up logging
-    init_logger(config.verbose);
+    init_logger(args.verbose);
 
-    // Run the server or the worker
-    if config.server {
-        run_server(config);
-    } else {
-        run_worker(config);
+    // Run the client, server, or worker and check the result
+    let result: Result<(), Error> = match args.command {
+        Command::Client => unimplemented!(),
+        Command::Server(args) => Server::run(args).map_err(|e| e.into()),
+        Command::Worker(args) => Worker::run(args).map_err(|e| e.into()),
+    };
+    if let Err(error) = result {
+        error!("{}", error);
+        exit(1);
     }
 }
 
@@ -55,20 +58,4 @@ fn init_logger(debug: bool) {
         false => LevelFilter::Info,
     };
     env_logger::builder().filter_level(level).format_module_path(false).init();
-}
-
-/// Run the server, printing an error message on failure
-fn run_server(config: Config) {
-    if let Err(error) = Server::run(&config.address, config.port) {
-        error!("{}", error);
-        exit(2);
-    }
-}
-
-/// Run the worker, printing an error message on failure
-fn run_worker(config: Config) {
-    if let Err(error) = Worker::connect(config.name, &config.address, config.port) {
-        error!("{}", error);
-        exit(2);
-    }
 }
