@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 /// The maximum number of tasks that can be waiting in the render channel
 /// This must be greater than 0, otherwise the scheduler will not add any tasks (would block)
-const RENDER_CHANNEL_SIZE: usize = 2;
+const RENDER_CHANNEL_SIZE: usize = 1;
 
 /// A message sent by the scheduler with a frame to render
 #[derive(Debug)]
